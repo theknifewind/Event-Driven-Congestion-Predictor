@@ -10,13 +10,14 @@
 
 ---
 
-## 🌟 Key Features (Version 2)
+## 🌟 Key Features (Version 3)
 
 1. **Synthetic Impact Metric Generation:** Translates messy historical records (duration, priority, closure status) into a normalized `1.0 to 10.0` Congestion Impact Score.
-2. **Unsupervised Spatial Clustering:** Uses K-Means to automatically segment the city's latitude/longitude coordinates into 20 dynamic "Hotspot Clusters" without requiring manual map drawing.
-3. **NLP Event Description Processing:** Uses TF-IDF Vectorization to extract severity keywords directly from the raw text descriptions typed by officers or citizens.
-4. **Advanced Predictive Engine (Ensemble):** Utilizes a **Voting Regressor blending XGBoost and Random Forest**. It analyzes tabular data (vehicle types, time, priority) alongside the NLP features to achieve state-of-the-art accuracy.
-5. **Prescriptive Deployment Engine (Operations Research):** A deterministic heuristic matrix that translates the AI's impact score into explicit physical resource requirements.
+2. **Unsupervised & Supervised Spatial Data:** Uses K-Means to automatically segment coordinates into dynamic "Hotspot Clusters", while also one-hot encoding explicit `zone` and `corridor` tags.
+3. **NLP Event Description Processing:** Uses TF-IDF Vectorization to extract severity keywords directly from the raw text descriptions.
+4. **Hyperparameter Tuned Ensemble:** Utilizes a `RandomizedSearchCV` to mathematically optimize the hyperparameters of an **XGBoost & Random Forest Voting Regressor**, achieving state-of-the-art accuracy.
+5. **Model Explainability (SHAP):** Integrates SHAP (SHapley Additive exPlanations) to crack open the AI "black box" and show exactly which features drive specific impact scores.
+6. **Prescriptive Deployment Engine (Operations Research):** A deterministic heuristic matrix that translates the AI's impact score into explicit physical resource requirements.
 
 ## 📁 Repository Structure
 
