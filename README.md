@@ -11,6 +11,13 @@ Built for the **Traffic Innovation Hackathon**, this project replaces reactive, 
 
 ---
 
+## 🏅 Selected Theme: Intelligent Incident Response & Smarter Traffic Management (ITS)
+This submission fits directly into the **Intelligent Incident Response / Smarter Traffic Management** category. 
+* Rather than predicting historical static flows, it focuses on **event-driven congestion** (such as vehicle breakdowns, VIP movements, and water-logging) to calculate dynamic bottleneck impacts.
+* It bridges the gap between predictive AI (using XGBoost/RF) and prescriptive field operations (using an Operations Research resource allocation model).
+
+---
+
 ## 🛑 The Problem
 On-street illegal parking, planned VIP movements, and unplanned incidents (vehicle breakdowns, water-logging) frequently choke carriageways and intersections. Currently, traffic management faces three massive hurdles:
 1. **Reactive Enforcement:** Police are deployed *after* gridlock occurs.
@@ -42,7 +49,7 @@ We utilize a state-of-the-art **Voting Regressor** that blends the predictions o
 * `XGBoost Regressor`
 * `RandomForest Regressor`
 
-To guarantee maximum academic rigor, the model employs `RandomizedSearchCV` to dynamically test hundreds of configurations and mathematically lock in the absolute optimal hyperparameters for the dataset.
+To guarantee maximum academic rigor, the model employs `RandomizedSearchCV` to dynamically test hundreds of configurations and mathematically lock in the optimal hyperparameters for the dataset.
 
 ### 4. Explainable AI (XAI)
 To build trust with traffic enforcement agencies and eliminate the "black box" problem, we integrated **SHAP (SHapley Additive exPlanations)**. The pipeline generates a SHAP Summary Plot, explicitly visualizing exactly *why* the model predicted a specific impact score (e.g., proving that the presence of a heavy vehicle drove the score up).
@@ -75,24 +82,38 @@ Because our target variable (`Impact_Score`) was algorithmically generated using
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started & Reviewer Testing
 
 ### Prerequisites
 Make sure you have the following installed:
-- Python 3.8+
-- Jupyter Notebook or JupyterLab
-- `pandas`, `numpy`, `scikit-learn`, `xgboost`, `matplotlib`, `seaborn`, `shap`
+- Python 3.9+
+- Anaconda / Miniconda (recommended)
+- Required packages: `streamlit`, `pydeck`, `xgboost`, `scikit-learn`, `pandas`, `numpy`, `shap`, `matplotlib`
+
+Install them in your environment using:
+```bash
+pip install streamlit pydeck xgboost scikit-learn pandas numpy shap matplotlib
+```
 
 ### Running the Project
-1. Clone this repository to your local machine:
+
+Reviewers can test the project in two ways:
+
+#### Option A: The Interactive Web Dashboard (Streamlit App)
+This features our premium Command Operations Center, Live Map Congestion Buffer, Digital Twin Road Simulation, and Dispatch Event Manager.
+1. Run the Streamlit server from your terminal:
    ```bash
-   git clone https://github.com/your-username/UrbanFlow-AI.git
-   cd UrbanFlow-AI
+   streamlit run app.py
    ```
-2. Open `Event_Driven_Congestion.ipynb` in your preferred Jupyter environment.
-3. Click **"Run All Cells"**.
-   *Note: The `RandomizedSearchCV` hyperparameter tuning cell tests multiple models and may take 1-2 minutes to execute.*
-4. Scroll to the bottom of the notebook to view the **SHAP visualizations** and the simulated **Live Prescriptive Deployment Orders**!
+2. Open your browser and navigate to `http://localhost:8501`.
+3. Use the sidebar to simulate events and watch the map, simulation, and resources update in real-time.
+
+#### Option B: The Python Jupyter Notebook (ML Pipeline)
+This contains the hyperparameter tuning loop, model training scripts, and explainability plots.
+1. Open the project folder in your preferred Jupyter environment.
+2. Reopen and run `Event_Driven_Congestion.ipynb`.
+3. Scroll to the bottom to view the **SHAP summary plots** and the model comparison outputs.
 
 ---
 *Built with ❤️ for the Traffic Innovation Hackathon*
+
