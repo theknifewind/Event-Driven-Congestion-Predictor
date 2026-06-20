@@ -11,13 +11,6 @@ Built for the **Traffic Innovation Hackathon**, this project replaces reactive, 
 
 ---
 
-## 🏅 Selected Theme: Intelligent Incident Response & Smarter Traffic Management (ITS)
-This submission fits directly into the **Intelligent Incident Response / Smarter Traffic Management** category. 
-* Rather than predicting historical static flows, it focuses on **event-driven congestion** (such as vehicle breakdowns, VIP movements, and water-logging) to calculate dynamic bottleneck impacts.
-* It bridges the gap between predictive AI (using XGBoost/RF) and prescriptive field operations (using an Operations Research resource allocation model).
-
----
-
 ## 🛑 The Problem
 On-street illegal parking, planned VIP movements, and unplanned incidents (vehicle breakdowns, water-logging) frequently choke carriageways and intersections. Currently, traffic management faces three massive hurdles:
 1. **Reactive Enforcement:** Police are deployed *after* gridlock occurs.
