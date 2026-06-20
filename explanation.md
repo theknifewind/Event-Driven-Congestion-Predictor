@@ -23,28 +23,29 @@ Instead of just feeding raw columns into a model, we extracted deep context:
 
 ### 3. Hyperparameter Tuned Voting Regressor (The "Why")
 We utilized a **Voting Regressor**, combining the strengths of an **XGBoost Regressor** and a **RandomForest Regressor**.
-- *Why not Deep Learning?* Tree-based models absolutely dominate tabular datasets of this size (~8k rows). 
-- *Why Tuning?* We mathematically optimized the XGBoost hyperparameters using `RandomizedSearchCV`. This proves to the judges that our configuration isn't guesswork; it is mathematically proven to be the absolute best architecture for this specific dataset.
+- *Why not Deep Learning?* Tree-based models dominate tabular datasets of this scale (~8k rows). 
+- *Why Tuning?* We optimized the XGBoost hyperparameters using `RandomizedSearchCV`. This identifies a highly performant parameter configuration within our search space, reducing overall variance compared to default configurations.
 
 ### 4. Explainable AI via SHAP (The "Why")
-"Black box" AI is dangerous for law enforcement. We implemented **SHAP (SHapley Additive exPlanations)** to peek under the hood. The SHAP Summary Plot visibly proves exactly *which* features (like peak hour, a specific zone, or a TF-IDF text keyword) caused the AI to predict a high congestion score.
+"Black box" AI is dangerous for law enforcement. We implemented **SHAP (SHapley Additive exPlanations)** to peek under the hood. The SHAP Summary Plot visibly demonstrates which features (like peak hour, a specific zone, or a TF-IDF text keyword) influence the model's predictions.
 
 ### 5. Heuristic Resource Allocation (The "Why")
-Machine Learning cannot predict what it hasn't seen. Since we have no historical labels for "number of barricades used", we implemented an **Operations Research approach**. We defined an expert ruleset matrix that translates the continuous `Impact_Score` predicted by the AI directly into discrete physical resources (Police Officers, Barricades, Diversion levels).
+Machine Learning cannot predict what it hasn't seen. Since we have no historical labels for "number of barricades used", we implemented an **Operations Research approach**. We defined a rule matrix that translates the continuous `Impact_Score` predicted by the AI directly into discrete physical resources (Police Officers, Barricades, Diversion levels).
 
 ---
 
 ## Model Evaluation Metrics
 
-Our advanced Voting Regressor achieves state-of-the-art precision. We evaluate it using two primary metrics:
+Our Voting Regressor's validation performance is evaluated using two primary metrics:
 
 ### 1. Mean Absolute Error (MAE): ~0.98
 **What it is:** MAE measures the average magnitude of the errors in a set of predictions, without considering their direction.
-**Hackathon Example:** If a major water-logging event in Koramangala is mathematically calculated to be an `8.5` in severity, our AI will predict it to be somewhere between `7.5` and `9.5`. Because the Resource Recommendation Matrix uses bucketed thresholds (e.g., anything >= 8.0 gets maximum deployment), being off by less than 1 point guarantees the correct tactical response almost every time.
+**Operational Context:** An MAE of ~0.98 on a 1-to-10 scale indicates that the predicted impact score generally aligns with our engineered proxy category, serving as a reliable baseline guide for resource allocation.
 
-### 2. Root Mean Squared Error (RMSE): ~1.36
-**What it is:** RMSE is the standard deviation of the prediction errors (residuals). It heavily penalizes large errors (e.g., being off by 4 points hurts the score much more than being off by 1 point four times).
-**Hackathon Example:** An RMSE of 1.36 proves that our model makes **zero catastrophic mistakes**. If the AI predicted a 2.0 (minor traffic jam) when the reality was a 9.0 (major highway gridlock), the RMSE would explode into the 3.0+ range. Keeping it below 1.5 proves the model is incredibly reliable and won't under-deploy police during severe incidents.
+### 2. Root Mean Squared Error (RMSE): ~1.32
+**What it is:** RMSE is the standard deviation of the residuals (prediction errors). It is sensitive to large individual errors due to squaring.
+**Operational Context:** An RMSE of ~1.32 shows that the model's prediction errors are relatively well-contained, with few extreme outliers. Minimizing the gap between MAE and RMSE ensures that the model rarely makes catastrophic mispredictions (e.g., predicting a minor disruption when the event has highly critical features), preventing operational under-deployment.
+
 
 ---
 
