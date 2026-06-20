@@ -19,7 +19,7 @@ On-street illegal parking, planned VIP movements, and unplanned incidents (vehic
 
 ## 💡 Our Solution
 UrbanFlow AI solves this by deploying a two-stage architecture:
-1. **The Predictive Engine:** An advanced Ensemble AI that ingests real-time incident data (location, time, cause, raw text descriptions) to forecast a highly accurate `Congestion Impact Score` (1.0 to 10.0).
+1. **The Predictive Engine:** An advanced Ensemble AI that ingests real-time incident data (location, time, cause, raw text descriptions) to forecast a `Congestion Impact Score` (1.0 to 10.0).
 2. **The Prescriptive Engine:** An Operations Research heuristic matrix that translates the AI's predicted score into explicit, actionable deployment orders (exact numbers of personnel, barricades, and categorized diversion plans)## 🧠 System Architecture & Methodology
 
 ### 1. Data Engineering & Preprocessing Refactoring
@@ -57,7 +57,9 @@ To ensure operational transparency and robustness, we developed this pipeline th
 | **Data Handled** | Tabular, Lat/Long | Tabular, Lat/Long, Text | **Tabular, Text, Zones, Concurrent Load** |
 | **Tuning Mechanism**| None (Default params) | None (Manual params) | **`RandomizedSearchCV`** |
 | **Explainability**| None | None | **SHAP Explainer (RandomForest Proxy)** |
+| **Naive Baseline MAE**| `~1.23` (Mean Pred) | `~1.23` (Mean Pred) | **`~1.23` (Mean Pred)** |
 | **Downstream Impact MAE**| `~1.25` | `~0.98` | **`1.007`** |
+| **Improvement vs Baseline**| `-1.6%` | `+20.3%` (Leaked) | **~18%** (Defensible) |
 | **Downstream Impact RMSE**| `~1.75` | `~1.36` | **`1.399`** |
 
 ### ⚠️ Important Methodology Caveat & Target Leakage Prevention
@@ -105,6 +107,4 @@ This contains the hyperparameter tuning loop, model training scripts, and explai
 2. Reopen and run [Event_Driven_Congestion.ipynb](file:///c:/Users/sriji/Projects/Event-Driven%20Congestion/Event_Driven_Congestion.ipynb).
 3. Scroll to the bottom to view the **SHAP summary plots** and the model comparison outputs.
 
----
-*Built with ❤️ for the Traffic Innovation Hackathon* Traffic Innovation Hackathon*
 
