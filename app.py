@@ -172,27 +172,56 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Haversine distance calculator in numpy
+def haversine_np(lon1, lat1, lon2, lat2):
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return 6367 * c
+
 # ==========================================
 # 3. MODEL TRAINING CACHE (Runs only once)
 # ==========================================
 @st.cache_resource
 def load_and_train_model():
-    data_path = r"dataset\Astram event data_anonymized - Astram event data_anonymizedb40ac87.csv"
+    data_path = "dataset/Astram event data_anonymized - Astram event data_anonymizedb40ac87.csv"
     df = pd.read_csv(data_path)
     
     cols_to_keep = [
         'id', 'event_type', 'latitude', 'longitude', 'event_cause',
-        'requires_road_closure', 'start_datetime', 'closed_datetime', 'priority', 'veh_type', 'description', 'zone', 'corridor'
+        'requires_road_closure', 'start_datetime', 'closed_datetime', 'end_datetime', 'priority', 'veh_type', 'description', 'zone', 'corridor'
     ]
     cols_present = [c for c in cols_to_keep if c in df.columns]
     df = df[cols_present]
     
     df['start_datetime'] = pd.to_datetime(df['start_datetime'], errors='coerce', utc=True)
     df['closed_datetime'] = pd.to_datetime(df['closed_datetime'], errors='coerce', utc=True)
-    df = df.dropna(subset=['start_datetime', 'closed_datetime']).copy()
+    df['end_datetime'] = pd.to_datetime(df['end_datetime'], errors='coerce', utc=True)
     
-    df['duration_mins'] = (df['closed_datetime'] - df['start_datetime']).dt.total_seconds() / 60.0
+    # Coalesce resolution times (end_datetime for planned, closed_datetime for unplanned)
+    df['resolved_time'] = df['closed_datetime'].fillna(df['end_datetime'])
+    df = df.dropna(subset=['start_datetime', 'resolved_time']).copy()
+    
+    df['duration_mins'] = (df['resolved_time'] - df['start_datetime']).dt.total_seconds() / 60.0
     df = df[(df['duration_mins'] >= 0) & (df['duration_mins'] <= 10080)].copy()
+    
+    # Clean spatial coordinates
+    df = df[(df['latitude'] != 0) & (df['longitude'] != 0)].copy()
+    df = df.dropna(subset=['latitude', 'longitude']).copy()
+    
+    # Calculate Spatial-Temporal Concurrent Overlapping Load (Real-time signal)
+    lats = df['latitude'].values
+    lons = df['longitude'].values
+    starts = df['start_datetime'].values
+    resolveds = df['resolved_time'].values
+    n = len(df)
+    active_loads = [np.sum(haversine_np(lons[i], lats[i], lons[(starts <= starts[i]) & (resolveds >= starts[i])], lats[(starts <= starts[i]) & (resolveds >= starts[i])]) <= 5.0) - 1 for i in range(n)]
+    df['nearby_active_events'] = active_loads
+    
+    # Encode event_type (planned vs unplanned)
+    df['event_type_planned'] = (df['event_type'].str.lower() == 'planned').astype(int)
     
     def map_priority(p):
         p = str(p).lower()
@@ -204,10 +233,10 @@ def load_and_train_model():
     df['requires_road_closure'] = df['requires_road_closure'].fillna(False).astype(bool)
     df['closure_multiplier'] = np.where(df['requires_road_closure'], 1.5, 1.0)
     
+    # Calculate synthetic target bounds for scaling downstream
     df['raw_impact'] = df['duration_mins'] * df['priority_score'] * df['closure_multiplier']
     df['log_impact'] = np.log1p(df['raw_impact'])
     min_impact, max_impact = df['log_impact'].min(), df['log_impact'].max()
-    df['impact_score'] = 1 + 9 * ((df['log_impact'] - min_impact) / (max_impact - min_impact + 1e-9))
     
     df['hour'] = df['start_datetime'].dt.hour
     df['is_weekend'] = df['start_datetime'].dt.dayofweek.isin([5, 6]).astype(int)
@@ -215,9 +244,6 @@ def load_and_train_model():
     def is_peak_hour(h):
         return 1 if (8 <= h <= 11) or (17 <= h <= 20) else 0
     df['is_peak_hour'] = df['hour'].apply(is_peak_hour)
-    
-    df = df[(df['latitude'] != 0) & (df['longitude'] != 0)].copy()
-    df = df.dropna(subset=['latitude', 'longitude']).copy()
     
     kmeans = KMeans(n_clusters=20, random_state=42, n_init=10)
     df['hotspot_cluster'] = kmeans.fit_predict(df[['latitude', 'longitude']])
@@ -243,12 +269,15 @@ def load_and_train_model():
     df_tfidf = pd.DataFrame(desc_tfidf, columns=tfidf_cols, index=df_model.index)
     df_model = pd.concat([df_model, df_tfidf], axis=1)
     
-    base_features = ['hour', 'is_weekend', 'is_peak_hour', 'priority_score', 'closure_multiplier', 'hotspot_cluster']
+    base_features = [
+        'hour', 'is_weekend', 'is_peak_hour', 'hotspot_cluster',
+        'nearby_active_events', 'priority_score', 'closure_multiplier', 'event_type_planned'
+    ]
     cat_features = [c for c in df_model.columns if 'event_cause_' in c or 'veh_type_' in c or 'zone_' in c or 'corridor_' in c]
     features = base_features + cat_features + tfidf_cols
     
     X = df_model[features]
-    y = df_model['impact_score']
+    y = np.log1p(df_model['duration_mins']) # Leakage-free Target variable: log of duration
     
     xgb_best = xgb.XGBRegressor(n_estimators=100, max_depth=3, learning_rate=0.1, random_state=42)
     rf_best = RandomForestRegressor(n_estimators=100, max_depth=10, random_state=42)
@@ -256,11 +285,11 @@ def load_and_train_model():
     model = VotingRegressor([('xgb', xgb_best), ('rf', rf_best)])
     model.fit(X, y)
     
-    return model, kmeans, tfidf, features, unique_vals
+    return model, kmeans, tfidf, features, unique_vals, min_impact, max_impact
 
 # Initialize model
 with st.spinner("Initializing AI Engine..."):
-    model, kmeans, tfidf, features, unique_vals = load_and_train_model()
+    model, kmeans, tfidf, features, unique_vals, min_impact, max_impact = load_and_train_model()
 
 # ==========================================
 # 4. INITIALIZE SESSION STATE
@@ -273,19 +302,29 @@ if 'active_prediction' not in st.session_state:
 # ==========================================
 # 5. PREDICTION & EXTRA METRICS CALCULATOR
 # ==========================================
-def calculate_metrics(in_hour, in_weekend, in_priority, in_closure, in_lat, in_lon, in_cause, in_veh, in_zone, in_corridor, in_desc):
+def calculate_metrics(in_event_type, in_hour, in_weekend, in_priority, in_closure, in_lat, in_lon, in_cause, in_veh, in_zone, in_corridor, in_desc):
     is_peak = 1 if (8 <= in_hour <= 11) or (17 <= in_hour <= 20) else 0
-    p_score = 3 if in_priority == "High" else (2 if in_priority == "Medium" else 1)
+    p_score = 3 if in_priority == "High" else 1
     c_mult = 1.5 if in_closure else 1.0
     cluster = kmeans.predict(pd.DataFrame({'latitude': [in_lat], 'longitude': [in_lon]}))[0]
     
+    # Calculate live active overlapping events (Real-time signal)
+    nearby_count = 0
+    for event in st.session_state.logged_events:
+        if event['status'] != 'RESOLVED' and 'inputs' in event:
+            d = haversine_np(in_lon, in_lat, event['inputs']['lon'], event['inputs']['lat'])
+            if d <= 5.0:
+                nearby_count += 1
+                
     input_data = {
         'hour': [in_hour],
         'is_weekend': [1 if in_weekend else 0],
         'is_peak_hour': [is_peak],
+        'hotspot_cluster': [cluster],
+        'nearby_active_events': [nearby_count],
         'priority_score': [p_score],
         'closure_multiplier': [c_mult],
-        'hotspot_cluster': [cluster],
+        'event_type_planned': [1 if in_event_type == "planned" else 0],
         'event_cause': [in_cause],
         'veh_type': [in_veh],
         'zone': [in_zone],
@@ -304,33 +343,44 @@ def calculate_metrics(in_hour, in_weekend, in_priority, in_closure, in_lat, in_l
         df_input_dummy[f'tfidf_{i}'] = desc_tfidf[0][i]
         
     X_pred = df_input_dummy[features]
-    predicted_score = float(model.predict(X_pred)[0])
     
-    # 1. Affected Radius (km)
-    priority_coef = 0.5 if in_priority == "Low" else (1.2 if in_priority == "Medium" else 2.2)
+    # Predict duration log
+    pred_log_duration = float(model.predict(X_pred)[0])
+    pred_duration = np.expm1(pred_log_duration)
+    
+    # Downstream policy business rule to calculate impact score
+    raw_impact = pred_duration * p_score * c_mult
+    log_raw_impact = np.log1p(raw_impact)
+    
+    # Scale score to 1.0 - 10.0 range
+    predicted_score = float(1.0 + 9.0 * ((log_raw_impact - min_impact) / (max_impact - min_impact + 1e-9)))
+    predicted_score = max(1.0, min(10.0, predicted_score))
+    
+    # 1. Affected Radius (km) - Prescriptive Heuristic
+    priority_coef = 0.5 if in_priority == "Low" else 2.2
     closure_coef = 1.6 if in_closure else 1.0
     desc_weight = min(len(in_desc) * 0.005, 0.3)
     affected_radius = round((0.8 + priority_coef + desc_weight) * closure_coef * 0.8, 2)
     
-    # 2. Road Saturation (%)
+    # 2. Road Saturation (%) - Prescriptive Heuristic
     base_sat = 12.0
     peak_sat = 22.0 if is_peak else 5.0
-    priority_sat = 5.0 if in_priority == "Low" else (18.0 if in_priority == "Medium" else 38.0)
+    priority_sat = 5.0 if in_priority == "Low" else 38.0
     closure_sat = 20.0 if in_closure else 2.0
     road_saturation = round(min(99.0, base_sat + peak_sat + priority_sat + closure_sat + (predicted_score * 1.5)), 1)
     
-    # 3. Est. Delay (mins)
+    # 3. Est. Delay (mins) - Prescriptive Heuristic
     est_delay = int((predicted_score ** 1.85) * (1.35 if is_peak else 0.75) + (25 if in_closure else 0))
     if predicted_score < 4.0 and not in_closure:
         est_delay = max(0, int(predicted_score - 3))
         
-    # 4. Traffic Increase (%)
+    # 4. Traffic Increase (%) - Prescriptive Heuristic
     traffic_increase = round(min(160.0, (predicted_score * 13) + (35 if is_peak else 8) + (25 if in_closure else 4)), 1)
     
     # 5. Optimized Deployment (Matching Teammate-level high-fidelity scaling)
     zone_factor = 1.25 if "Zone 2" in in_zone or "Zone 1" in in_zone else 1.0
     corridor_factor = 1.3 if in_corridor != "Non-corridor" else 0.85
-    base_units = 18 if in_priority == "Low" else (40 if in_priority == "Medium" else 85)
+    base_units = 18 if in_priority == "Low" else 85
     peak_factor = 1.35 if is_peak else 0.8
     closure_factor = 1.45 if in_closure else 1.0
     
@@ -372,6 +422,7 @@ def calculate_metrics(in_hour, in_weekend, in_priority, in_closure, in_lat, in_l
         'is_peak': is_peak,
         'p_score': p_score,
         'inputs': {
+            'event_type': in_event_type,
             'hour': in_hour,
             'weekend': in_weekend,
             'priority': in_priority,
@@ -532,10 +583,12 @@ st.markdown("Instantly forecast traffic impact, simulate digital twin corridors,
 # Sidebar Parameters
 st.sidebar.header("📝 Incident Parameters")
 
+in_event_type = st.sidebar.selectbox("Event Type", ["unplanned", "planned"], index=0)
+
 col_1, col_2 = st.sidebar.columns(2)
 in_hour = col_1.slider("Hour of Day", 0, 23, 17)
 in_weekend = col_2.checkbox("Is Weekend?", value=False)
-in_priority = st.sidebar.selectbox("Priority Level", ["Low", "Medium", "High"], index=2)
+in_priority = st.sidebar.selectbox("Priority Level", ["Low", "High"], index=1)
 in_closure = st.sidebar.checkbox("Requires Road Closure", value=True)
 
 st.sidebar.markdown("---")
@@ -550,7 +603,7 @@ in_corridor = st.sidebar.selectbox("Corridor", unique_vals['corridor'])
 in_desc = st.sidebar.text_input("Incident Description", "heavy water logging blocking road")
 
 # Automatically compute prediction and save to session state when sidebar inputs change
-pred_res = calculate_metrics(in_hour, in_weekend, in_priority, in_closure, in_lat, in_lon, in_cause, in_veh, in_zone, in_corridor, in_desc)
+pred_res = calculate_metrics(in_event_type, in_hour, in_weekend, in_priority, in_closure, in_lat, in_lon, in_cause, in_veh, in_zone, in_corridor, in_desc)
 st.session_state.active_prediction = pred_res
 
 # Main Dashboard Navigation Tabs
@@ -664,10 +717,28 @@ with tab_cc:
                 'vehicles': res['vehicles'],
                 'barricades': res['barricades'],
                 'cost': res['cost'],
-                'status': 'DISPATCHED'
+                'status': 'DISPATCHED',
+                'inputs': {
+                    'event_type': in_event_type,
+                    'hour': in_hour,
+                    'weekend': in_weekend,
+                    'priority': in_priority,
+                    'closure': in_closure,
+                    'lat': in_lat,
+                    'lon': in_lon,
+                    'cause': in_cause,
+                    'veh': in_veh,
+                    'zone': in_zone,
+                    'corridor': in_corridor,
+                    'desc': in_desc
+                }
             }
             st.session_state.logged_events.append(event_log)
             st.success(f"Incident logged successfully with ID: {event_id} under DISPATCHED status.")
+            
+        st.markdown("<div style='height: 15px;'></div>", unsafe_allow_html=True)
+        st.caption("⚠️ Operational Heuristics Disclaimer: Metrics like Road Saturation, Affected Radius, Est. Delay, and Traffic Increase are computed via prescriptive heuristics derived from priority, closure status, and predicted impact. They are not direct predictions from the machine learning model.")
+
 
 # ==========================================
 # TAB 2: DIGITAL TWIN & LIVE MAP
