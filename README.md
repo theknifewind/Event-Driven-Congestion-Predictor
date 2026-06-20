@@ -62,16 +62,16 @@ To ensure the highest possible accuracy, we developed this pipeline through thre
 | **Mean Absolute Error**| `~1.25` | `~0.98` | `~0.98` |
 | **Root Mean Sq. Error**| `~1.75` | `~1.36` | `~1.32` |
 
-### The "Mathematical Floor" & The Synthetic Target Effect
-You will notice the error metrics stabilize significantly between V2 and V3 (MAE stays at ~0.98 and RMSE at ~1.32). This is a known data science phenomenon called the **Mathematical Floor**. 
+### ⚠️ Important Methodology Caveat: Synthetic Target & Prediction Limits
+Since the raw dataset does not contain real-world historical congestion levels, travel delays, or resource counts, the target variable (`Impact_Score`) was engineered as a deterministic proxy: `log1p(Duration × Priority × Road Closure Penalty)`. 
 
-Because our target variable (`Impact_Score`) was algorithmically generated using `Duration × Priority`, the AI perfectly learned the core logic by V2. Adding geographic features (Zones) in V3 makes the model structurally bulletproof, but it won't force the error rate to 0.0 because the synthetic target variable lacks infinite "organic" real-world noise. 
+Consequently, the model's reported accuracy (MAE ~0.98) comes with a critical caveat:
+1. **Not a Measure of Real-world Congestion:** The MAE does not measure prediction error against physical road gridlock. Instead, it measures how well the regression ensemble can recover and approximate our proxy formula based on the initial incident parameters.
+2. **The Prediction Task at Inference:** At inference time, the actual duration of the event is *unknown*. The model's actual value lies in its ability to predict the *expected* duration and severity of a new incident based solely on initial inputs (cause, description text, location, and time).
+3. **The "Mathematical Floor" effect:** The error rates stabilize at V2/V3 because the model has reached the limits of predicting the synthetic formula from the available subset of features. 
 
-**Why V3 is still the definitive version:**
-1. **Zero Overfitting:** `RandomizedSearchCV` guarantees the model generalizes perfectly.
-2. **Geographic Insights via SHAP:** Explicitly encoding the zones allows the SHAP Explainer to definitively tell law enforcement exactly *where* congestion bottlenecks occur, something the V1/V2 black-boxes could never do.
+**Future Roadmap:** To transition this from a bootstrap prototype to a production system, the target variable should be replaced with real-world observed traffic telemetry (e.g., GPS probe speed data, actual queue lengths, or real police dispatch logs).
 
-*An MAE of ~0.98 on a 1-to-10 scale guarantees the Prescriptive Engine almost always triggers the correct tactical response bucket, making this a fully "solved problem."*
 
 ---
 

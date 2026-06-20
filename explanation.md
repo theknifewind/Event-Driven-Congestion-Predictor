@@ -48,15 +48,12 @@ Our advanced Voting Regressor achieves state-of-the-art precision. We evaluate i
 
 ---
 
-## The "Mathematical Floor" & The Synthetic Target Effect
-When upgrading the model from Version 2 to Version 3 (adding Geofencing/Zones and Hyperparameter Tuning), the MAE stabilizes at ~0.98 and RMSE at ~1.32 rather than dropping towards 0.0. This is a crucial data science concept called the **Mathematical Floor**.
+## ⚠️ Methodology Caveat: Synthetic Target & Prediction Limits
 
-Because the dataset lacked a real "Traffic Impact" ground truth, we had to synthetically engineer the `Impact_Score` using `Duration × Priority`. 
-1. **The Core Features Hit the Ceiling:** The AI perfectly learned the primary mathematical relationship between how long an event lasts (Duration), its priority, and the resulting score. That drove the MAE down to `0.98`.
-2. **Why the error doesn't drop to 0.0:** Adding deeper geographic features (`zones`, `corridors`) makes the model structurally bulletproof, but it won't force the error rate to 0.0 because the synthetic target variable doesn't contain infinite "organic" real-world noise. 
+Because the raw dataset lacks physical ground-truth labels for "traffic delay" or "congestion severity," the target variable (`Impact_Score`) was synthetically engineered as a proxy: `log1p(Duration × Priority × Road Closure Penalty)`. 
 
-**Why V3 is still superior despite the stabilized error:**
-- **Elimination of Overfitting:** The `RandomizedSearchCV` hyperparameter tuning mathematically ensures the model isn't just memorizing the data.
-- **Explainability (SHAP):** By adding `zones` and `corridors`, the SHAP Explainer can explicitly prove to the judges, *"This congestion was worse specifically because it happened in Zone X."* Without these added features, the SHAP plot would lack actionable geographic insights.
+This introduces an important limitation that must be disclosed:
+1. **Target Rationale:** Rather than representing absolute physical gridlock, the MAE (~0.98) measures how closely the ML models can approximate our proxy formula using only the initial incident attributes.
+2. **Inference Value:** Since the *actual duration* of a new incident is unknown when it is first reported, the ML model acts as a predictor of the *expected duration/severity* of the event, enabling proactive dispatching.
+3. **Generalization & Future Steps:** The model is an operational bootstrap. In a real-world production deployment, this model should be retrained on actual traffic speed telemetry (e.g., GPS probe speeds or loops sensors) rather than a derived mathematical formula.
 
-An MAE of **0.98** and RMSE of **1.32** on a 1-to-10 scale is considered a "Solved Problem." The model is literally as perfect as the dataset allows it to be.
